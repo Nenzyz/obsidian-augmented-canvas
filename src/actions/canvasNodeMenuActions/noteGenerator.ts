@@ -13,7 +13,7 @@ import {
 // import { Logger } from "./util/logging";
 import { visitNodeAndAncestors } from "../../obsidian/canvasUtil";
 import { readNodeContent } from "../../obsidian/fileUtil";
-import { getResponse, streamResponse } from "../../utils/chatgpt";
+import { getResponse, streamResponse, getAIService } from "../../utils/chatgpt";
 import { CHAT_MODELS, chatModelByName } from "../../openai/models";
 
 /**
@@ -59,13 +59,20 @@ export function noteGenerator(
 	// logDebug: Logger
 ) {
 	const canCallAI = () => {
-		// return true;
-		if (!settings.apiKey) {
-			new Notice("Please set your OpenAI API key in the plugin settings");
+		try {
+			const aiService = getAIService();
+			const status = aiService.getCurrentProviderStatus();
+			
+			if (!status.available) {
+				new Notice(status.error || "AI provider not configured");
+				return false;
+			}
+			
+			return true;
+		} catch (error) {
+			new Notice("AI service not available. Please check plugin settings.");
 			return false;
 		}
-
-		return true;
 	};
 
 	const getActiveCanvas = () => {

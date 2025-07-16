@@ -1,4 +1,4 @@
-import { CanvasView } from "../../obsidian/canvas-patches";
+import { CanvasView, createNode } from "../../obsidian/canvas-patches";
 import { CanvasNode } from "../../obsidian/canvas-internal";
 import { App, Notice } from "obsidian";
 import { getActiveCanvas } from "../../utils";
@@ -9,6 +9,7 @@ import {
 } from "../../settings/AugmentedCanvasSettings";
 import { getResponse } from "../../utils/chatgpt";
 import { getTokenLimit } from "../canvasNodeMenuActions/noteGenerator";
+import { parseAIResponse } from "../../utils/jsonUtils";
 
 const FLASHCARDS_SYSTEM_PROMPT = `
 You must respond in this JSON format: {
@@ -74,8 +75,10 @@ ${settings.flashcardsSystemPrompt}`,
 	);
 	// console.log({ gptResponse });
 
+	const parsedResponse = parseAIResponse(gptResponse);
+	
 	const content = `
-${gptResponse.flashcards
+${parsedResponse.flashcards
 	.map(
 		(flashcard: { front: string; back: string }) =>
 			`${flashcard.front}::${flashcard.back}`
@@ -89,15 +92,15 @@ ${gptResponse.flashcards
 	const FLASHCARDS_PATH = "Home/Flashcards";
 	try {
 		await app.vault.createFolder(
-			`${FLASHCARDS_PATH}/${gptResponse.filename}`
+			`${FLASHCARDS_PATH}/${parsedResponse.filename}`
 		);
 	} catch {}
 	await app.vault.create(
-		`${FLASHCARDS_PATH}/${gptResponse.filename}/${gptResponse.filename}.md`,
+		`${FLASHCARDS_PATH}/${parsedResponse.filename}/${parsedResponse.filename}.md`,
 		content
 	);
 
-	new Notice(`Flashcard file "${gptResponse.filename}" created successfully`);
+	new Notice(`Flashcard file "${parsedResponse.filename}" created successfully`);
 
 	// await app.workspace.openLinkText(
 	// 	`Flashcards/${gptResponse.filename}.md`,

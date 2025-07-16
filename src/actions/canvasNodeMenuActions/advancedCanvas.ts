@@ -4,13 +4,49 @@ import { AugmentedCanvasSettings } from "../../settings/AugmentedCanvasSettings"
 import { CanvasNode } from "../../obsidian/canvas-internal";
 import { getResponse } from "../../utils/chatgpt";
 import { getActiveCanvas, getActiveCanvasNodes } from "src/utils";
+import { parseAIResponse } from "../../utils/jsonUtils";
 
 const SYSTEM_PROMPT_QUESTIONS = `
-You must respond in this JSON format: {
-	"questions": Follow up questions the user could ask based on the chat history, must be an array
+You must respond ONLY with valid JSON in this exact format:
+{
+	"questions": ["Question 1?", "Question 2?", "Question 3?"]
 }
-The questions must be asked in the same language the user used, default to English.
+
+Generate 3-5 follow-up questions based on the content. The questions must be in the same language as the content, default to English.
+
+IMPORTANT: Return ONLY the JSON object, no other text before or after.
 `.trim();
+
+// Fallback function to extract questions from plain text
+function extractQuestionsFromText(text: string): string[] {
+	const questions: string[] = [];
+	
+	// Try to find questions in various formats
+	const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+	
+	for (const line of lines) {
+		// Look for lines that end with '?' or start with question words
+		if (line.endsWith('?') || 
+			/^(what|how|why|when|where|who|which|could|would|should|can|will|is|are|do|does|did)/i.test(line)) {
+			// Clean up the line (remove bullet points, numbers, etc.)
+			const cleanQuestion = line.replace(/^[-*•\d+.\s]+/, '').trim();
+			if (cleanQuestion.length > 10) { // Ignore very short "questions"
+				questions.push(cleanQuestion);
+			}
+		}
+	}
+	
+	// If no questions found, return a default set
+	if (questions.length === 0) {
+		return [
+			"Can you explain this in more detail?",
+			"What are the key takeaways?",
+			"How does this relate to other concepts?"
+		];
+	}
+	
+	return questions.slice(0, 5); // Limit to 5 questions
+}
 
 export const addAskAIButton = async (
 	app: App,
@@ -69,7 +105,21 @@ export const handleCallGPT_Questions = async (
 		}
 	);
 
-	return gptResponse.questions;
+	try {
+		const parsedResponse = parseAIResponse(gptResponse);
+		if (parsedResponse.questions && Array.isArray(parsedResponse.questions)) {
+			return parsedResponse.questions;
+		} else {
+			console.error('Invalid response format:', parsedResponse);
+			return [];
+		}
+	} catch (error) {
+		console.error('Failed to parse JSON response:', gptResponse, error);
+		// Try to extract questions from plain text response
+		const textResponse = typeof gptResponse === 'string' ? gptResponse : JSON.stringify(gptResponse);
+		const questions = extractQuestionsFromText(textResponse);
+		return questions.length > 0 ? questions : [];
+	}
 };
 
 const handleRegenerateResponse = async (

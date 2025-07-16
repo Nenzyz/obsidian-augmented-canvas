@@ -12,8 +12,11 @@ import {
 	SystemPrompt,
 	getImageModels,
 	getModels,
+	getModelsFromService,
+	getImageModelsFromService,
 } from "./AugmentedCanvasSettings";
 import { initLogDebug } from "src/logDebug";
+import { PROVIDERS, ProviderType, getProviderInfo } from "src/providers";
 
 export class SettingsTab extends PluginSettingTab {
 	plugin: ChatStreamPlugin;
@@ -28,48 +31,37 @@ export class SettingsTab extends PluginSettingTab {
 
 		containerEl.empty();
 
+		// Provider Selection
 		new Setting(containerEl)
-			.setName("Model")
-			.setDesc("Select the GPT model to use.")
+			.setName("AI Provider")
+			.setDesc("Select the AI provider to use.")
 			.addDropdown((cb) => {
-				getModels().forEach((model) => {
-					cb.addOption(model, model);
+				Object.values(PROVIDERS).forEach((provider) => {
+					cb.addOption(provider.id, provider.name);
 				});
-				cb.setValue(this.plugin.settings.apiModel);
-				cb.onChange(async (value) => {
-					this.plugin.settings.apiModel = value;
+				cb.setValue(this.plugin.settings.currentProvider);
+				cb.onChange(async (value: ProviderType) => {
+					this.plugin.settings.currentProvider = value;
 					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName("Image Model")
-			.setDesc("Select the GPT model to generate images.")
-			.addDropdown((cb) => {
-				getImageModels().forEach((model) => {
-					cb.addOption(model, model);
-				});
-				cb.setValue(this.plugin.settings.imageModel);
-				cb.onChange(async (value) => {
-					this.plugin.settings.imageModel = value;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName("API key")
-			.setDesc(
-				"The API key to use when making requests - Get from OpenAI"
-			)
-			.addText((text) => {
-				text.inputEl.type = "password";
-				text.setPlaceholder("API Key")
-					.setValue(this.plugin.settings.apiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.apiKey = value;
+					
+					// Try to refresh models for the new provider
+					try {
+						await this.plugin.aiService.refreshModels(value);
 						await this.plugin.saveSettings();
-					});
+					} catch (error) {
+						// Silently fail - will use fallback models
+						console.debug(`Could not refresh models for ${value}:`, error);
+					}
+					
+					this.display(); // Refresh the settings display
+				});
 			});
+
+		// Provider Configuration
+		this.displayProviderConfig();
+
+		// Model Selection
+		this.displayModelSelection();
 
 		new Setting(containerEl)
 			.setName("Youtube API key")
@@ -405,6 +397,158 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			}
 		);
+	}
+
+	displayProviderConfig(): void {
+		const { containerEl } = this;
+		const currentProvider = this.plugin.settings.currentProvider;
+		const providerInfo = getProviderInfo(currentProvider);
+		const currentConfig = this.plugin.settings.providers[currentProvider];
+
+		// Provider configuration section
+		const providerSection = containerEl.createEl("div", {
+			cls: "setting-item-heading",
+		});
+		providerSection.textContent = `${providerInfo.name} Configuration`;
+
+		// Add refresh models button
+		new Setting(containerEl)
+			.setName("Refresh Models")
+			.setDesc("Fetch the latest available models from the provider")
+			.addButton((button) => {
+				button
+					.setButtonText("Refresh")
+					.onClick(async () => {
+						try {
+							await this.plugin.aiService.refreshModels(currentProvider);
+							new Notice("Models refreshed successfully");
+							this.display();
+						} catch (error) {
+							new Notice(`Failed to refresh models: ${error.message}`);
+						}
+					});
+			});
+
+		// Add configuration fields for the current provider
+		providerInfo.configFields.forEach((field) => {
+			const setting = new Setting(containerEl)
+				.setName(field.label)
+				.setDesc(`${field.required ? "Required" : "Optional"}`);
+
+			if (field.type === "password") {
+				setting.addText((text) => {
+					text.inputEl.type = "password";
+					text.setPlaceholder(field.placeholder || "");
+					text.setValue(currentConfig.config[field.key] || "");
+					text.onChange(async (value) => {
+						currentConfig.config[field.key] = value;
+						await this.plugin.saveSettings();
+					});
+				});
+			} else if (field.type === "url") {
+				setting.addText((text) => {
+					text.setPlaceholder(field.placeholder || "");
+					text.setValue(currentConfig.config[field.key] || "");
+					text.onChange(async (value) => {
+						currentConfig.config[field.key] = value;
+						await this.plugin.saveSettings();
+					});
+				});
+			} else {
+				setting.addText((text) => {
+					text.setPlaceholder(field.placeholder || "");
+					text.setValue(currentConfig.config[field.key] || "");
+					text.onChange(async (value) => {
+						currentConfig.config[field.key] = value;
+						await this.plugin.saveSettings();
+					});
+				});
+			}
+		});
+	}
+
+	displayModelSelection(): void {
+		const { containerEl } = this;
+		const currentProvider = this.plugin.settings.currentProvider;
+		const providerInfo = getProviderInfo(currentProvider);
+
+		// Chat Model Selection
+		const chatModelSetting = new Setting(containerEl)
+			.setName("Chat Model")
+			.setDesc("Select the model to use for text generation.");
+
+		this.loadChatModels(chatModelSetting);
+
+		// Image Model Selection (only for providers that support it)
+		if (providerInfo.supportsImageGeneration) {
+			const imageModelSetting = new Setting(containerEl)
+				.setName("Image Model")
+				.setDesc("Select the model to generate images.");
+
+			this.loadImageModels(imageModelSetting);
+		}
+	}
+
+	private loadChatModels(setting: Setting): void {
+		setting.addDropdown(async (cb) => {
+			try {
+				// Load models from service
+				const models = await getModelsFromService(this.plugin.aiService);
+				
+				models.forEach((model) => {
+					cb.addOption(model.id, model.name);
+				});
+				
+				// Set current value
+				cb.setValue(this.plugin.settings.apiModel);
+				
+				cb.onChange(async (value) => {
+					this.plugin.settings.apiModel = value;
+					await this.plugin.saveSettings();
+				});
+			} catch (error) {
+				// Fallback to legacy models
+				getModels().forEach((model) => {
+					cb.addOption(model, model);
+				});
+				cb.setValue(this.plugin.settings.apiModel);
+				cb.onChange(async (value) => {
+					this.plugin.settings.apiModel = value;
+					await this.plugin.saveSettings();
+				});
+			}
+		});
+	}
+
+	private async loadImageModels(setting: Setting): Promise<void> {
+		setting.addDropdown(async (cb) => {
+			try {
+				// Load image models from service
+				const models = await getImageModelsFromService(this.plugin.aiService);
+				
+				models.forEach((model) => {
+					cb.addOption(model.id, model.name);
+				});
+				
+				// Set current value
+				cb.setValue(this.plugin.settings.imageModel);
+				
+				cb.onChange(async (value) => {
+					this.plugin.settings.imageModel = value;
+					await this.plugin.saveSettings();
+				});
+			} catch (error) {
+				// Fallback to legacy models
+				getImageModels().forEach((model) => {
+					cb.addOption(model, model);
+				});
+				cb.setValue(this.plugin.settings.imageModel);
+				cb.onChange(async (value) => {
+					this.plugin.settings.imageModel = value;
+					await this.plugin.saveSettings();
+				});
+			}
+		});
 	}
 }
 

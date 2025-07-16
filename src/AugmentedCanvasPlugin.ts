@@ -30,7 +30,9 @@ import SystemPromptsModal from "./modals/SystemPromptsModal";
 
 import { createFlashcards } from "./actions/canvasNodeContextMenuActions/flashcards";
 import { getFilesContent } from "./obsidian/fileUtil";
-import { getResponse } from "./utils/chatgpt";
+import { getResponse, setAIService } from "./utils/chatgpt";
+import { AIService } from "./services/aiService";
+import { ProviderType } from "./providers";
 import { parseCsv } from "./utils/csvUtils";
 import { handleAddRelevantQuestions } from "./actions/commands/relevantQuestions";
 import { handleGenerateImage } from "./actions/canvasNodeContextMenuActions/generateImage";
@@ -51,9 +53,15 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	patchSucceed: boolean = false;
 
 	settings: AugmentedCanvasSettings;
+	aiService: AIService;
 
 	async onload() {
 		await this.loadSettings();
+		
+		// Initialize AI service
+		this.aiService = new AIService(this.settings);
+		setAIService(this.aiService);
+		
 		this.addSettingTab(new SettingsTab(this.app, this));
 
 		// this.registerCommands();
@@ -71,6 +79,9 @@ export default class AugmentedCanvasPlugin extends Plugin {
 			if (this.settings.systemPrompts.length === 0) {
 				this.fetchSystemPrompts();
 			}
+
+			// Refresh models for the current provider if none are cached
+			this.refreshModelsIfNeeded();
 		});
 		// this.patchCanvasInteraction();
 		// this.patchCanvasNode();
@@ -119,6 +130,34 @@ export default class AugmentedCanvasPlugin extends Plugin {
 			DEFAULT_SETTINGS,
 			await this.loadData()
 		);
+		
+		// Migration logic for backward compatibility
+		this.migrateSettings();
+	}
+
+	private migrateSettings() {
+		// If user has old settings with just apiKey, migrate to new provider structure
+		if (this.settings.apiKey && !this.settings.providers.openai.config.apiKey) {
+			this.settings.providers.openai.config.apiKey = this.settings.apiKey;
+		}
+
+		// Ensure currentProvider is set
+		if (!this.settings.currentProvider) {
+			this.settings.currentProvider = "openai";
+		}
+
+		// Ensure providers structure exists
+		if (!this.settings.providers) {
+			this.settings.providers = DEFAULT_SETTINGS.providers;
+		}
+
+		// Migrate any missing provider structures
+		Object.keys(DEFAULT_SETTINGS.providers).forEach(providerType => {
+			if (!this.settings.providers[providerType as ProviderType]) {
+				this.settings.providers[providerType as ProviderType] = 
+					DEFAULT_SETTINGS.providers[providerType as ProviderType];
+			}
+		});
 	}
 
 	patchCanvasMenu() {
@@ -448,7 +487,27 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		});
 	}
 
+	private async refreshModelsIfNeeded() {
+		const currentProvider = this.settings.currentProvider;
+		const cachedModels = this.settings.providers[currentProvider]?.models || [];
+		
+		// If no models are cached for the current provider, try to refresh them
+		if (cachedModels.length === 0) {
+			try {
+				await this.aiService.refreshModels(currentProvider);
+				await this.saveSettings();
+			} catch (error) {
+				// Silently fail - models will fall back to hardcoded ones
+				console.debug(`Could not refresh models for ${currentProvider}:`, error);
+			}
+		}
+	}
+
 	async saveSettings() {
 		await this.saveData(this.settings);
+		// Update AI service with new settings
+		if (this.aiService) {
+			this.aiService.updateSettings(this.settings);
+		}
 	}
 }

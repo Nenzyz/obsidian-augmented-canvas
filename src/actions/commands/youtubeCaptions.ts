@@ -2,7 +2,7 @@ import { App } from "obsidian";
 import { AugmentedCanvasSettings } from "src/settings/AugmentedCanvasSettings";
 import { getYouTubeVideoId } from "src/utils";
 
-import { google } from "googleapis";
+// import { google } from "googleapis";
 
 async function getVideoSubtitles(
 	settings: AugmentedCanvasSettings,
@@ -47,6 +47,9 @@ async function getVideoSubtitles(
 	// 	console.error("Error fetching video captions:", error);
 	// 	return [];
 	// }
+	
+	// Temporary return until YouTube API is properly implemented
+	return [];
 }
 
 export const runYoutubeCaptions = async (

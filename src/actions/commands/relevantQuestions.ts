@@ -3,6 +3,7 @@ import { AugmentedCanvasSettings } from "../../settings/AugmentedCanvasSettings"
 import { getFilesContent } from "../../obsidian/fileUtil";
 import { getResponse } from "../../utils/chatgpt";
 import { createCanvasGroup } from "../../utils";
+import { parseAIResponse } from "../../utils/jsonUtils";
 
 const RELEVANT_QUESTION_SYSTEM_PROMPT = `
 There must be 6 questions.
@@ -51,7 +52,8 @@ ${RELEVANT_QUESTION_SYSTEM_PROMPT}
 	);
 	// console.log({ gptResponse });
 
-	await createCanvasGroup(app, "Questions", gptResponse.questions);
+	const parsedResponse = parseAIResponse(gptResponse);
+	await createCanvasGroup(app, "Questions", parsedResponse.questions);
 
 	new Notice("Generating relevant questions done successfully.");
 };
