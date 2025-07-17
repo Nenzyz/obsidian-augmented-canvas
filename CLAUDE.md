@@ -64,6 +64,8 @@ src/
 #### Canvas Context Understanding
 The plugin builds conversation context by traversing canvas node connections. It reads content from various node types (text notes, markdown files, PDFs) and sends this context to AI providers along with user prompts.
 
+**Context Separation**: Connected nodes are separated using a configurable separator (default: `\n\n---\n\n`) to ensure AI understands each connected node as distinct context rather than continuous text. This separator can be customized in plugin settings.
+
 #### Provider-Specific API Handling
 - **Gemini**: Uses Obsidian's `request()` API instead of `fetch()` to avoid CORS issues
 - **Claude**: Implements Anthropic's message format with system prompts
@@ -75,6 +77,14 @@ Robust parsing system that handles AI responses wrapped in markdown code blocks.
 
 #### Settings Migration System
 Maintains backward compatibility with existing OpenAI configurations while supporting multi-provider setup. Settings automatically migrate when users upgrade from OpenAI-only versions.
+
+#### Context Separator Configuration
+The `contextSeparator` setting allows users to customize how connected nodes are separated in conversation context:
+- **Default**: `"\n\n---\n\n"` (horizontal rule with spacing)
+- **Location**: Plugin settings → "Context separator"
+- **Usage**: Enter `\n` for newlines in the settings UI
+- **Purpose**: Prevents AI from treating connected nodes as continuous text
+- **Token Handling**: Separator tokens are properly counted and handled during truncation
 
 ### Feature Implementation Patterns
 
@@ -117,5 +127,6 @@ When adding new providers:
 - Test with invalid API keys and network failures
 - Validate backward compatibility with existing configs
 - Test dynamic model fetching for each provider
+- Test context separator functionality with various separators and connected node scenarios
 
 This codebase requires understanding of both Obsidian plugin architecture and modern AI service integration patterns. The multi-provider system demonstrates sophisticated architectural evolution while maintaining user compatibility.

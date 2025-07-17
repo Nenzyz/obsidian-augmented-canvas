@@ -145,7 +145,11 @@ export function noteGenerator(
 			if (nodeText) {
 				if (isSystemPromptNode(nodeText)) return true;
 
-				let nodeTokens = encoding.encode(nodeText);
+				// Add context separator for connected nodes to improve AI understanding
+				const contextSeparator = depth > 0 ? settings.contextSeparator : "";
+				const nodeContentWithContext = `${contextSeparator}${nodeText}`;
+				
+				let nodeTokens = encoding.encode(nodeContentWithContext);
 				let keptNodeTokens: number;
 
 				if (tokenCount + nodeTokens.length > inputLimit) {
@@ -153,15 +157,12 @@ export function noteGenerator(
 
 					shouldContinue = false;
 
+					// Account for separator tokens when truncating
+					const separatorTokens = encoding.encode(contextSeparator);
+					const availableTokens = inputLimit - tokenCount - separatorTokens.length - 1;
+					
 					// Leaving one token margin, just in case
-					const keepTokens = nodeTokens.slice(
-						0,
-						inputLimit - tokenCount - 1
-						// * needed because very large context is a little above
-						// * should this be a number from settings.maxInput ?
-						// TODO
-						// (nodeTokens.length > 100000 ? 20 : 1)
-					);
+					const keepTokens = encoding.encode(nodeText).slice(0, availableTokens);
 					const truncateTextTo = encoding.decode(keepTokens).length;
 					logDebug(
 						`Truncating node text from ${nodeText.length} to ${truncateTextTo} characters`
@@ -170,7 +171,7 @@ export function noteGenerator(
 						`Truncating node text from ${nodeText.length} to ${truncateTextTo} characters`
 					);
 					nodeText = nodeText.slice(0, truncateTextTo);
-					keptNodeTokens = keepTokens.length;
+					keptNodeTokens = separatorTokens.length + keepTokens.length;
 				} else {
 					keptNodeTokens = nodeTokens.length;
 				}
@@ -180,6 +181,9 @@ export function noteGenerator(
 				const role: any =
 					nodeData.chat_role === "assistant" ? "assistant" : "user";
 
+				// Recalculate content with separator using potentially truncated nodeText
+				const finalNodeContentWithContext = `${contextSeparator}${nodeText}`;
+
 				if (edgeLabel) {
 					messages.unshift({
 						content: edgeLabel,
@@ -187,7 +191,7 @@ export function noteGenerator(
 					});
 				}
 				messages.unshift({
-					content: nodeText,
+					content: finalNodeContentWithContext,
 					role,
 				});
 			}
@@ -312,7 +316,7 @@ export function noteGenerator(
 							return;
 						}
 
-						let newText;
+						let newText: string;
 						if (firstDelta) {
 							newText = delta;
 							firstDelta = false;

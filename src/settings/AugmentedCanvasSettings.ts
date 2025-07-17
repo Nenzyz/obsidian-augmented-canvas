@@ -104,6 +104,11 @@ export interface AugmentedCanvasSettings {
 	 * The Youtube API Key
 	 */
 	youtubeApiKey: string;
+
+	/**
+	 * Separator used between connected nodes when building conversation context
+	 */
+	contextSeparator: string;
 }
 // export const DEFAULT_SYSTEM_PROMPT = `
 // You are a critical-thinking assistant bot.
@@ -174,6 +179,7 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	imageModel: IMAGE_MODELS.DALL_E_3.name,
 	imagesPath: undefined,
 	youtubeApiKey: "",
+	contextSeparator: "\n\n---\n\n",
 };
 
 // Legacy functions - kept for backward compatibility but should use AI service when available

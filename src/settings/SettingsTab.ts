@@ -231,6 +231,22 @@ export class SettingsTab extends PluginSettingTab {
 		// 	});
 
 		new Setting(containerEl)
+			.setName("Context separator")
+			.setDesc("Separator used between connected nodes when building conversation context. Use \\n for newlines.")
+			.addText((text) => {
+				text.inputEl.style.width = "300px";
+				text.setPlaceholder("\\n\\n---\\n\\n")
+					// Display newlines as escaped for user input
+					.setValue(this.plugin.settings.contextSeparator.replace(/\n/g, '\\n'))
+					.onChange(async (value) => {
+						// Convert escaped newlines to actual newlines
+						const processedValue = value.replace(/\\n/g, '\n');
+						this.plugin.settings.contextSeparator = processedValue;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
 			.setName("Debug output")
 			.setDesc("Enable debug output in the console")
 			.addToggle((component) => {
