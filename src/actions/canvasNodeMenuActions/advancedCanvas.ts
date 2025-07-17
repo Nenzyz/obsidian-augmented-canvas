@@ -128,15 +128,10 @@ const handleRegenerateResponse = async (
 ) => {
 	const activeNode = getActiveCanvasNodes(app)![0];
 
-	// const canvas = getActiveCanvas(app);
-
-	// // @ts-expect-error
-	// const toNode = activeNode.to.node;
-
-	// console.log({ toNode });
-
-	// canvas!.removeNode(toNode);
-	// canvas?.requestSave();
+	// Extract the question from the edge label if it exists
+	// @ts-expect-error
+	const edgeLabel = activeNode.label;
+	const question = edgeLabel && edgeLabel.trim() ? edgeLabel.trim() : undefined;
 
 	const { generateNote } = noteGenerator(
 		app,
@@ -147,7 +142,8 @@ const handleRegenerateResponse = async (
 		activeNode.to.node
 	);
 
-	await generateNote();
+	// Pass the question when regenerating to maintain the original prompt
+	await generateNote(question);
 };
 
 export const addRegenerateResponse = async (
